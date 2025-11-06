@@ -12,7 +12,7 @@ app.use(cors({
     credentials: true,               // Essential for sending/receiving cookies
 }));
 app.use(cookieParser())
-
+const PORT = process.env.PORT || 4000;
 //auth routes
 app.use(authRoutes);
 
@@ -22,7 +22,7 @@ mongoose
   .connect(mongodb_uri)
   .then(() => {
     console.log("Connected to mongodb");
-    app.listen(4000, () => {
+    app.listen(PORT, () => {
       console.log("Server is running");
     });
   })
