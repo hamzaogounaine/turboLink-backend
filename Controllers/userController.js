@@ -125,7 +125,7 @@ const userSignUp = async (req, res) => {
   } catch (err) {
     console.log(err);
     const errors = handleErrors(err);
-    return res.status(403).json(errors);
+    return res.status(404).json(errors);
   }
 };
 
@@ -148,7 +148,7 @@ const userLogin = async (req, res) => {
       return res.status(403).json(err.message);
     }
     const errors = handleErrors(err);
-    return res.status(403).json(errors);
+    return res.status(404).json(errors);
   }
 };
 
