@@ -1,6 +1,8 @@
 const { Router } = require("express");
 const authMiddelware = require("../Middelwares/authMiddelware");
-const { userSignUp, userLogin, refreshToken, getUser } = require("../Controllers/userController");
+const { userSignUp, userLogin, refreshToken, getUser, googleCallBack } = require("../Controllers/userController");
+const passport = require("passport");
+require('../Controllers/passport.config')
 
 const authRoutes = Router()
 
@@ -9,6 +11,17 @@ authRoutes.post('/api/signup' , userSignUp)
 authRoutes.post('/api/login' , userLogin)
 authRoutes.post('/api/refresh-token' , refreshToken)
 authRoutes.get('/api/profile' , authMiddelware , getUser)
+authRoutes.get('/auth/google/callback' , passport.authenticate('google', {
+    failureRedirect: '/auth-fail', // A simple failure route
+    session: false // Ensure stateless
+}), googleCallBack)
+authRoutes.get(
+    '/auth/google',
+    passport.authenticate('google', { 
+        scope: ['profile', 'email'], // <-- THIS IS THE REQUIRED FIX!
+        session: false // Keep session: false for JWT flow
+    })
+);
 
 
 

@@ -4,6 +4,7 @@ require("dotenv").config();
 const authRoutes = require("./Routes/authRoutes");
 const mongoose = require("mongoose");
 const cookieParser = require("cookie-parser");
+const passport = require("passport");
 
 const app = express();
 app.use(express.json());
@@ -11,6 +12,7 @@ app.use(cors({
     origin: process.env.FRONTEND_URL, // Allow only your frontend URL
     credentials: true,               // Essential for sending/receiving cookies
 }));
+app.use(passport.initialize());
 app.use(cookieParser())
 const PORT = process.env.PORT || 4000;
 //auth routes

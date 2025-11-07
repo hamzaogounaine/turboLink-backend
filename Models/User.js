@@ -4,6 +4,9 @@ const { isEmail } = require("validator");
 
 const userSchema = mongoose.Schema(
   {
+    googleId : {
+      type : String
+    },
     username: {
       type: String,
       required: [true, "usernameRequired"],
@@ -19,9 +22,13 @@ const userSchema = mongoose.Schema(
     },
     password: {
       type: String,
-      required: [true, "passwordRequired"],
-      minLength: [6, "passwordMinLength"],
+      // required: [true, "passwordRequired"],
+      // minLength: [6, "passwordMinLength"],
       selected : false
+    },
+    isGoogleUser :{
+      type : Boolean,
+      default : false
     },
     refresh_token : {
       type : String,
