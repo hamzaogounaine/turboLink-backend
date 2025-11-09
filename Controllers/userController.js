@@ -164,7 +164,7 @@ const userResetPassword = async (req, res) => {
     const isPasswordValid = await bcrypt.compare(oldPassword, user.password);
 
     if (!isPasswordValid) {
-      return res.status(401).json({ message: 'The current password is incorrect.' });
+      return res.status(400).json({ message: 'The current password is incorrect.' });
     }
 
     // Optional: Check if the new password is the same as the old one
@@ -214,6 +214,7 @@ const googleCallBack = async (req, res) => {
     
     const updatedUser = await User.findByIdAndUpdate(
       user._id,
+
       { refresh_token: refreshToken }, // CORRECTED FIELD NAME to match other logic
       { new: true }
     );
