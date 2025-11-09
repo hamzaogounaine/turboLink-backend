@@ -30,7 +30,8 @@ passport.use(
                         email: email,
                         // Ensure the username generation is simple and non-conflicting
                         username: profile.displayName.replace(/\s/g, '').toLowerCase() + Math.floor(Math.random() * 100), 
-                        isGoogleUser: true
+                        isGoogleUser: true,
+                        is_email_verified : true
                     });
                 } else if (!user.googleId) {
                     // 2. Existing local user: Link the Google ID for future social logins

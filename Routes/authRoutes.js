@@ -1,6 +1,6 @@
 const { Router } = require("express");
 const authMiddelware = require("../Middelwares/authMiddelware");
-const { userSignUp, userLogin, refreshToken, getUser, googleCallBack } = require("../Controllers/userController");
+const { userSignUp, userLogin, refreshToken, getUser, googleCallBack, userLogout, userResetPassword } = require("../Controllers/userController");
 const passport = require("passport");
 require('../Controllers/passport.config')
 
@@ -11,6 +11,8 @@ authRoutes.post('/api/signup' , userSignUp)
 authRoutes.post('/api/login' , userLogin)
 authRoutes.post('/api/refresh-token' , refreshToken)
 authRoutes.get('/api/profile' , authMiddelware , getUser)
+authRoutes.post('/api/logout' , authMiddelware , userLogout)
+authRoutes.post('/api/reset-password' , authMiddelware , userResetPassword)
 authRoutes.get('/auth/google/callback' , passport.authenticate('google', {
     failureRedirect: '/auth-fail', // A simple failure route
     session: false // Ensure stateless

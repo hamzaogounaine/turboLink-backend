@@ -30,6 +30,10 @@ const userSchema = mongoose.Schema(
       type : Boolean,
       default : false
     },
+    is_email_verified : {
+      type : Boolean,
+      default : false
+    },
     refresh_token : {
       type : String,
     }
