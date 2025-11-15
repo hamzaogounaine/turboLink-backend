@@ -53,7 +53,6 @@ const userSignUp = async (req, res) => {
     req.body;
   const errors = {};
   try {
-
     const existingUser = await User.findOne({ $or: [{ email }, { username }] });
 
     if (existingUser) {
@@ -66,7 +65,7 @@ const userSignUp = async (req, res) => {
     }
 
     if (Object.keys(errors).length > 0) {
-      return res.status(400).json({errors});
+      return res.status(400).json({ errors });
     }
 
     const createdUser = await User.create({
@@ -108,12 +107,12 @@ const userLogin = async (req, res) => {
     const { accessToken, refreshToken } = generateTokens(user);
 
     // if(user.last_login_ip !== clientIP) {
-    //   const code = 
+    //   const code =
     // }
 
     const updatedUser = await User.findByIdAndUpdate(
       user._id,
-      { refresh_token: refreshToken , last_login_ip : clientIP },
+      { refresh_token: refreshToken, last_login_ip: clientIP },
       { new: true } // returns the updated document
     );
     return sendAuthResponse(
@@ -121,7 +120,7 @@ const userLogin = async (req, res) => {
       updatedUser,
       accessToken,
       refreshToken,
-    (message = "loginSuccess")
+      (message = "loginSuccess")
     );
   } catch (err) {
     if (err.message === "invalidCredentials") {
@@ -133,22 +132,22 @@ const userLogin = async (req, res) => {
   }
 };
 
-
 const userLogout = async (req, res) => {
   const authHeader = req.headers.authorization;
-  
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
     res.clearCookie("refreshToken");
     return res.status(400).json({ message: "malformedTokenHeader" });
   }
 
-  const accessToken = authHeader.split(' ')[1];
+  const accessToken = authHeader.split(" ")[1];
   let userId;
 
   try {
-    const decoded = jwt.verify(accessToken, process.env.ACCESS_TOKEN_SECRET, { ignoreExpiration: true });
+    const decoded = jwt.verify(accessToken, process.env.ACCESS_TOKEN_SECRET, {
+      ignoreExpiration: true,
+    });
     userId = decoded.userId;
-
   } catch (err) {
     res.clearCookie("refreshToken");
     console.error("Logout: Invalid access token signature/format:", err);
@@ -157,11 +156,10 @@ const userLogout = async (req, res) => {
 
   try {
     await User.findByIdAndUpdate(userId, { refresh_token: null });
-    
+
     res.clearCookie("refreshToken");
 
     return res.status(200).json({ message: "loggedOut" });
-
   } catch (err) {
     console.error("Logout Database/Cookie Error:", err);
     // Use 500 for unexpected server/DB failures
@@ -278,8 +276,8 @@ const googleCallBack = async (req, res) => {
       // Leaving SameSite unset or setting to 'Lax' is the best practice here.
       // If 'Lax' doesn't work, try removing the sameSite property completely.
       // sameSite: "Lax",
-      secure : true,
-      sameSite: "None",
+      secure: process.env.NODE_ENV === "prod" && true,
+      sameSite: process.env.NODE_ENV === "prod" ? "None" : "Lax",
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
@@ -297,6 +295,58 @@ const googleCallBack = async (req, res) => {
   }
 };
 
+const updateProfile = async (req, res) => {
+  // Use destructuring for clarity
+  const { userId, firstName, lastName, email, phoneNumber } = req.body;
+
+  // 1. INPUT VALIDATION (Crucial step you missed)
+  if (!userId) {
+    return res.status(400).json({ message: 'Missing userId in request body.' });
+  }
+
+  try {
+    // 2. CHECK: Await the first database call to see if the user exists
+    const user = await User.findById(userId); 
+    
+    if (!user) {
+      // The user object is null if Mongoose can't find it
+      return res.status(404).json({ message: 'No user found with that ID.' });
+    }
+
+    console.log(user)
+
+    // 3. UPDATE: Use findByIdAndUpdate with the 'new: true' option.
+    // We update the document and wait for the result.
+    const updatedUser = await User.findByIdAndUpdate(
+      userId, 
+      {
+        first_name: firstName,
+        last_name: lastName,
+        email: email,
+        phone_number: phoneNumber
+      },
+      { new: true, runValidators: true } // {new: true} returns the updated document
+    );
+    
+    // 4. RESPONSE: Return the successful status and the updated user data
+    if (updatedUser) {
+      // Return the updated user object so the client knows what changed
+      return res.status(200).json({ 
+        message: 'Profile updated successfully',
+        user: updatedUser 
+      });
+    } else {
+        // This case shouldn't happen if the first check passed, but acts as a safeguard
+        return res.status(500).json({ message: 'Update failed unexpectedly.' });
+    }
+  } catch (err) {
+    // 5. ERROR HANDLING: Be specific in your status codes for database errors
+    console.error("Profile update error:", err);
+    return res.status(500).json({ message: 'Server error during profile update.' });
+  }
+};
+
+
 module.exports = {
   userSignUp,
   userLogin,
@@ -304,4 +354,5 @@ module.exports = {
   getUser,
   googleCallBack,
   userResetPassword,
+  updateProfile,
 };
