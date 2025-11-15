@@ -107,9 +107,9 @@ const userLogin = async (req, res) => {
     const user = await User.login(email, password);
     const { accessToken, refreshToken } = generateTokens(user);
 
-    if(user.last_login_ip !== clientIP) {
-      const code = 
-    }
+    // if(user.last_login_ip !== clientIP) {
+    //   const code = 
+    // }
 
     const updatedUser = await User.findByIdAndUpdate(
       user._id,
