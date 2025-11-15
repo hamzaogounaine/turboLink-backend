@@ -30,7 +30,8 @@ const sendAuthResponse = async (
     // you must *not* set secure: true or SameSite: 'None'.
     // Leaving SameSite unset or setting to 'Lax' is the best practice here.
     // If 'Lax' doesn't work, try removing the sameSite property completely.
-    sameSite: "Lax",
+    secure : true,
+    sameSite: "None",
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   });
 
