@@ -4,7 +4,7 @@ const crypto = require("crypto");
 const { sendVerificationLink } = require("./sendEmails");
 const getAccountVerificationEmailTemplate = require("../emails/emailVerficationTemplates");
 const sharp = require("sharp");
-const { uploadToS3 } = require("../lib/s3-upload");
+const { uploadToS3, deleteFromS3 } = require("../lib/s3-upload");
 
 const generateTokens = (user) => {
   const accessToken = jwt.sign(
@@ -214,6 +214,7 @@ const editAvatar = async (req, res) => {
 
     const fileName = `avatars/${crypto.randomUUID()}.jpeg`;
     
+    
     // Upload the resized buffer to S3
     const imageUrl = await uploadToS3(resizedBuffer, fileName, 'image/jpeg');
 
@@ -231,25 +232,61 @@ const editAvatar = async (req, res) => {
   }
 };
 
-const updateAvatarUrl = async (req , res) => {
-  const {avatar , userId} = req.body;
+const updateAvatarUrl = async (req, res) => {
+  const { avatar, userId } = req.body;
 
-  if(!avatar) {
-    return res.status(400).json({message : "Provice a valide url"})
+  if (!userId || typeof userId !== 'string') {
+  
+      return res.status(400).json({ message: "Invalid user ID provided." });
+  }
+  if (!avatar || typeof avatar !== 'string' || !avatar.startsWith('http')) {
+      return res.status(400).json({ message: "Provide a valid public image URL." });
   }
 
-  if(!userId) {
-    return res.status(400).json({message: "Provide a user Id"})
+  try {
+     
+      const userToUpdate = await User.findById(userId);
+
+      if (!userToUpdate) {
+        
+          return res.status(404).json({ message: "User not found." });
+      }
+
+      
+      const oldAvatarUrl = userToUpdate.avatar_url;
+
+      const updatedUser = await User.findByIdAndUpdate(
+          userId,
+          { avatar_url: avatar },
+          { new: true, runValidators: true } // runValidators ensures Mongoose validation runs
+      );
+
+      if (!updatedUser) {
+          return res.status(500).json({ message: "Failed to update database record." });
+      }
+
+      if (oldAvatarUrl && oldAvatarUrl !== avatar) {
+        deleteFromS3(oldAvatarUrl)
+          console.log(`[CLEANUP] Old avatar scheduled for deletion: ${oldAvatarUrl}`);
+      }
+
+      // 6. Success Response
+      // Use the updated document if you need to return fresh user data
+      return res.status(200).json({ 
+          message: 'Avatar updated successfully',
+      });
+      
+  } catch (error) {
+      console.error("Error updating avatar URL:", error);
+      
+      if (error.name === 'CastError') {
+           return res.status(400).json({ message: "Invalid ID format." });
+      }
+      
+      return res.status(500).json({ message: "Internal server error during update." });
   }
+};
 
-  const updatedUser = await User.findByIdAndUpdate(userId , {avatar_url : avatar})
-
-  if(updatedUser) {
-    return res.status(200).json({message : 'avatarUpdated'})
-  }
-} 
-
-// module.exports = editAvatar;
 
 module.exports = {
   generateTokens,

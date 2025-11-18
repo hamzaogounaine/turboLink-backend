@@ -313,8 +313,6 @@ const googleCallBack = async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
-    // 4. PERFORM THE FINAL REDIRECT TO THE FRONTEND
-    // The frontend only needs the short-lived access token and success status from the URL.
     return res.redirect(
       `${CLIENT_REDIRECT_URL}?accessToken=${accessToken}&success=true`
     );
