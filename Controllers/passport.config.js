@@ -17,9 +17,9 @@ passport.use(
         const googleId = profile.id;
         // Safely access the email from the profile object
         const email = profile.emails && profile.emails[0].value;
-        const firstName = payload["given_name"]; 
-        const lastName = payload["family_name"];
-        const picture = payload["picture"];
+        const firstName = profile["given_name"]; 
+        const lastName = profile["family_name"];
+        const picture = profile["picture"];
 
         let user = await User.findOne({
           $or: [{ googleId: googleId }, { email: email }],
