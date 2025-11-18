@@ -3,6 +3,8 @@ const User = require("../Models/User");
 const crypto = require("crypto");
 const { sendVerificationLink } = require("./sendEmails");
 const getAccountVerificationEmailTemplate = require("../emails/emailVerficationTemplates");
+const sharp = require("sharp");
+const { uploadToS3 } = require("../lib/s3-upload");
 
 const generateTokens = (user) => {
   const accessToken = jwt.sign(
@@ -24,8 +26,8 @@ const sendAuthResponse = async (
   res,
   user,
   accessToken,
-  refreshToken=null,
-  message=null
+  refreshToken = null,
+  message = null
 ) => {
   res.cookie("refreshToken", refreshToken, {
     httpOnly: true, // Recommended for security (cannot be read by JS)
@@ -33,8 +35,8 @@ const sendAuthResponse = async (
     // you must *not* set secure: true or SameSite: 'None'.
     // Leaving SameSite unset or setting to 'Lax' is the best practice here.
     // If 'Lax' doesn't work, try removing the sameSite property completely.
-    secure : process.env.NODE_ENV === 'prod' && true,
-      sameSite: process.env.NODE_ENV === 'prod' ? "None" : "Lax",
+    secure: process.env.NODE_ENV === "prod" && true,
+    sameSite: process.env.NODE_ENV === "prod" ? "None" : "Lax",
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   });
 
@@ -70,49 +72,51 @@ const handleErrors = (err) => {
 };
 
 const generateEmailVeficationToken = (userId) => {
-  const jsonSecret = process.env.EMAIL_VERIFICATION_TOKEN_SECRET
+  const jsonSecret = process.env.EMAIL_VERIFICATION_TOKEN_SECRET;
 
   const payload = {
     userId,
-    type : "email_verification"
+    type: "email_verification",
+  };
+
+  const token = jwt.sign(payload, jsonSecret, { expiresIn: "15m" });
+
+  return token;
+};
+
+const resendEmailVerificationLink = async (req, res) => {
+  const { userId } = req.body;
+  const lang = req.cookies["NEXT_LOCALE"];
+
+  const user = await User.findById(userId);
+
+  if (!user) {
+    return res.status(404).json({ message: "noUserFound" });
   }
 
-  const token = jwt.sign(payload, jsonSecret  , {expiresIn : '15m'})
-
-  return token
-
-}
-
-const resendEmailVerificationLink = async (req , res) => {
-  const {userId}  = req.body
-  const lang = req.cookies['NEXT_LOCALE'];
-  
-
-  const user = await User.findById(userId)
-
-  if(!user) {
-    return res.status(404).json({message : 'noUserFound'})
+  if (user.is_email_verified) {
+    return res.status(404).json({ message: "emailAlreadyVerified" });
   }
 
-  if(user.is_email_verified ) {
-    return res.status(404).json({message : 'emailAlreadyVerified'})
+  const verificationToken = generateEmailVeficationToken(userId);
+  const verificationLink = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
+
+  const { html, subject } = getAccountVerificationEmailTemplate(
+    lang,
+    user.username,
+    verificationLink
+  );
+
+  const emailSent = await sendVerificationLink(user.email, subject, html);
+
+  if (!emailSent) {
+    return res
+      .status(400)
+      .json({ message: "Error while sending verification link" });
   }
 
-  const verificationToken = generateEmailVeficationToken(userId)
-  const verificationLink = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`
-
-  const {html , subject} = getAccountVerificationEmailTemplate(lang , user.username , verificationLink)
-
-  const emailSent = await sendVerificationLink(user.email , subject , html)
-
-  if(!emailSent) {
-    return res.status(400).json({message : "Error while sending verification link"})
-  }
-
-  return res.status(200).json({message: "Email has been sent successfully"})
-
-  
-}
+  return res.status(200).json({ message: "Email has been sent successfully" });
+};
 
 const refreshToken = async (req, res) => {
   const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET;
@@ -147,43 +151,114 @@ const refreshToken = async (req, res) => {
 };
 
 const verifyDevice = async (req, res) => {
-  const {code , email} = req.body;
-  const clientIP = req.ip
+  const { code, email } = req.body;
+  const clientIP = req.ip;
 
-  if(!code ) {
-    return res.status(403).json({message : 'noCodeProvided'})
-  }
-  
-  const user = await User.findOne({email})
-
-  if(!user) {
-    return res.status(404).json({message : 'noUserFound'})
+  if (!code) {
+    return res.status(403).json({ message: "noCodeProvided" });
   }
 
-  if(user.ip_verification_code !== code) {
-    return res.status(403).json({message : 'invalidCode'})
+  const user = await User.findOne({ email });
+
+  if (!user) {
+    return res.status(404).json({ message: "noUserFound" });
   }
 
-  if(user.ip_verification_code_expiration < Date.now()) {
-    return res.status(403).json({message : 'codeExpired'})
+  if (user.ip_verification_code !== code) {
+    return res.status(403).json({ message: "invalidCode" });
   }
 
-  const {accessToken , refreshToken} = generateTokens(user)
+  if (user.ip_verification_code_expiration < Date.now()) {
+    return res.status(403).json({ message: "codeExpired" });
+  }
 
+  const { accessToken, refreshToken } = generateTokens(user);
 
-  const updatdUser = await User.findByIdAndUpdate(user._id , {
-    ip_verification_code : null,
-    ip_verification_code_expiration : null,
-    refresh_token : refreshToken,
-    last_login_ip : clientIP
-  })
+  const updatdUser = await User.findByIdAndUpdate(user._id, {
+    ip_verification_code: null,
+    ip_verification_code_expiration: null,
+    refresh_token: refreshToken,
+    last_login_ip: clientIP,
+  });
 
-  console.log(updatdUser)
+  console.log(updatdUser);
 
-  return sendAuthResponse(res,  updatdUser , accessToken , refreshToken , message = 'deviceVerified'  )
+  return sendAuthResponse(
+    res,
+    updatdUser,
+    accessToken,
+    refreshToken,
+    (message = "deviceVerified")
+  );
+};
 
-}
+const editAvatar = async (req, res) => {
+  if (!req.file || !req.file.buffer) {
+    return res.status(400).json({ 
+      message: "No image file provided or file buffer is empty." 
+    });
+  }
 
+  if (!req.file.mimetype.startsWith('image')) {
+    return res.status(400).json({ 
+        message: "Invalid file type. Only images are allowed." 
+    });
+  }
 
+  try {
+    // 💥 FIX: Correctly access the file buffer from multer (req.file.buffer)
+    const resizedBuffer = await sharp(req.file.buffer) 
+      .resize({ width: 500, height: 500, fit: "cover" })
+      .toFormat("jpeg", { mozjpeg: true, quality: 80 }) 
+      .toBuffer();
 
-module.exports = {generateTokens , sendAuthResponse , handleErrors , resendEmailVerificationLink , generateEmailVeficationToken , refreshToken , verifyDevice}
+    const fileName = `avatars/${crypto.randomUUID()}.jpeg`;
+    
+    // Upload the resized buffer to S3
+    const imageUrl = await uploadToS3(resizedBuffer, fileName, 'image/jpeg');
+
+    // SUCCESS: Return the S3 URL
+    return res.status(200).json({ url: imageUrl });
+    
+  } catch (err) {
+    // 💥 FIX: Proper Error Handling. Do not just log and hang the request.
+    console.error('Avatar Processing/S3 Upload Error:', err);
+    
+    // Return a 500 error response to the client
+    return res.status(500).json({ 
+      message: "Image processing or upload failed on the server." 
+    });
+  }
+};
+
+const updateAvatarUrl = async (req , res) => {
+  const {avatar , userId} = req.body;
+
+  if(!avatar) {
+    return res.status(400).json({message : "Provice a valide url"})
+  }
+
+  if(!userId) {
+    return res.status(400).json({message: "Provide a user Id"})
+  }
+
+  const updatedUser = await User.findByIdAndUpdate(userId , {avatar_url : avatar})
+
+  if(updatedUser) {
+    return res.status(200).json({message : 'avatarUpdated'})
+  }
+} 
+
+// module.exports = editAvatar;
+
+module.exports = {
+  generateTokens,
+  sendAuthResponse,
+  handleErrors,
+  resendEmailVerificationLink,
+  generateEmailVeficationToken,
+  refreshToken,
+  verifyDevice,
+  editAvatar,
+  updateAvatarUrl
+};
