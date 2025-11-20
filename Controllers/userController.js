@@ -8,7 +8,10 @@ const {
 } = require("../utils/authUtils");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
-const { resendEmailVerificationLink, sendVerificationLink } = require("../utils/sendEmails");
+const {
+  resendEmailVerificationLink,
+  sendVerificationLink,
+} = require("../utils/sendEmails");
 const getVerificationEmailTemplate = require("../emails/deviceVerificationTemplates");
 const getAccountVerificationEmailTemplate = require("../emails/emailVerficationTemplates");
 
@@ -56,7 +59,7 @@ const getUser = async (req, res) => {
 const userSignUp = async (req, res) => {
   const { username, email, password, firstName, lastName, confirmPassword } =
     req.body;
-    const lang = req.cookies['NEXT_LOCALE'];
+  const lang = req.cookies["NEXT_LOCALE"];
 
   const errors = {};
   try {
@@ -91,18 +94,27 @@ const userSignUp = async (req, res) => {
       { new: true } // returns the updated document
     );
 
-    const verificationToken = generateEmailVeficationToken(updatedUser._id)
-    const verificationLink = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`
-  
-    const {html , subject } = getAccountVerificationEmailTemplate(lang , updatedUser.username , verificationLink)
-  
-    const emailSent = await sendVerificationLink(to = updatedUser.email , subject  , body = html)
-    console.log(emailSent)
-  
-    if(!emailSent) {
-      return res.status(400).json({message : "Error while sending verification link"})
-    }
+    const verificationToken = generateEmailVeficationToken(updatedUser._id);
+    const verificationLink = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
 
+    const { html, subject } = getAccountVerificationEmailTemplate(
+      lang,
+      updatedUser.username,
+      verificationLink
+    );
+
+    const emailSent = await sendVerificationLink(
+      (to = updatedUser.email),
+      subject,
+      (body = html)
+    );
+    console.log(emailSent);
+
+    if (!emailSent) {
+      return res
+        .status(400)
+        .json({ message: "Error while sending verification link" });
+    }
 
     return sendAuthResponse(
       res,
@@ -121,28 +133,33 @@ const userSignUp = async (req, res) => {
 const userLogin = async (req, res) => {
   const { email, password } = req.body;
   const clientIP = req.ip;
-  const lang = req.cookies['NEXT_LOCALE'];
+  const lang = req.cookies["NEXT_LOCALE"];
 
   try {
     const user = await User.login(email, password);
-    
+
     if (clientIP !== user.last_login_ip) {
       const code = crypto.randomInt(100000, 999999);
       const codeExpiration = Date.now() + 15 * 60 * 1000; // 15 minutes
 
       await User.findByIdAndUpdate(user._id, {
-        ip_verification_code : code,
-        ip_verification_code_expiration : codeExpiration,
-      })
-      const {html , subject} = getVerificationEmailTemplate(lang , user.username, clientIP , code)
-      // await sendVerificationLink(to = user.email , subject  , body = html)
-    
+        ip_verification_code: code,
+        ip_verification_code_expiration: codeExpiration,
+      });
+      const { html, subject } = getVerificationEmailTemplate(
+        lang,
+        user.username,
+        clientIP,
+        code
+      );
+      await sendVerificationLink(to = user.email , subject  , body = html)
+
       return res.status(200).json({
-        message: 'mustVerifyIp',
-        codeSent: true
+        message: "mustVerifyIp",
+        codeSent: true,
       });
     }
-    
+
     const { accessToken, refreshToken } = generateTokens(user);
 
     const updatedUser = await User.findByIdAndUpdate(
@@ -151,7 +168,6 @@ const userLogin = async (req, res) => {
       { new: true } // returns the updated document
     );
 
-   
     return sendAuthResponse(
       res,
       updatedUser,
@@ -266,7 +282,6 @@ const userResetPassword = async (req, res) => {
     res.clearCookie("refreshToken");
     await user.save(); // Save the updated user document
 
-
     return res.status(200).json({ message: "Password updated successfully." });
   } catch (err) {
     // Handles errors from jwt.verify (e.g., expired or invalid token) or database errors
@@ -327,89 +342,107 @@ const googleCallBack = async (req, res) => {
 
 const updateProfile = async (req, res) => {
   // Use destructuring for clarity
-  const { userId, firstName, lastName, email, phoneNumber , password} = req.body;
+  const { userId, firstName, lastName, email, phoneNumber, password } =
+    req.body;
 
   // 1. INPUT VALIDATION (Crucial step you missed)
   if (!userId) {
-    return res.status(400).json({ message: 'Missing userId in request body.' });
+    return res.status(400).json({ message: "Missing userId in request body." });
   }
 
   try {
     // 2. CHECK: Await the first database call to see if the user exists
-    const user = await User.findById(userId).select('+password'); 
+    const user = await User.findById(userId).select("+password");
     if (!user) {
       // The user object is null if Mongoose can't find it
-      return res.status(404).json({ message: 'No user found with that ID.' });
+      return res.status(404).json({ message: "No user found with that ID." });
     }
 
-    const pwdIsValid = await bcrypt.compare(password , user.password)
-    
-    if(!pwdIsValid) {
-      return res.status(403).json({message : 'passwordIncorrect'})
+    const pwdIsValid = await bcrypt.compare(password, user.password);
+
+    if (!pwdIsValid) {
+      return res.status(403).json({ message: "passwordIncorrect" });
     }
 
     const updatedUser = await User.findByIdAndUpdate(
-      userId, 
+      userId,
       {
         first_name: firstName,
         last_name: lastName,
         email: email,
-        phone_number: phoneNumber
+        phone_number: phoneNumber,
       },
       { new: true, runValidators: true } // {new: true} returns the updated document
     );
-    
+
+    if (updatedUser.email !== email) {
+      const verificationToken = generateEmailVeficationToken(updatedUser._id);
+      const verificationLink = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
+
+      const { html, subject } = getAccountVerificationEmailTemplate(
+        lang,
+        updatedUser.username,
+        verificationLink
+      );
+
+      const emailSent = await sendVerificationLink(
+        (to = updatedUser.email),
+        subject,
+        (body = html)
+      );
+      console.log(emailSent)
+    }
+
     // 4. RESPONSE: Return the successful status and the updated user data
     if (updatedUser) {
       // Return the updated user object so the client knows what changed
-      return res.status(200).json({ 
-        message: 'Profile updated successfully',
-        user: updatedUser 
+      return res.status(200).json({
+        message: "Profile updated successfully",
+        user: updatedUser,
       });
     } else {
-        // This case shouldn't happen if the first check passed, but acts as a safeguard
-        return res.status(500).json({ message: 'Update failed unexpectedly.' });
+      // This case shouldn't happen if the first check passed, but acts as a safeguard
+      return res.status(500).json({ message: "Update failed unexpectedly." });
     }
   } catch (err) {
     // 5. ERROR HANDLING: Be specific in your status codes for database errors
     console.error("Profile update error:", err);
-    return res.status(500).json({ message: 'Server error during profile update.' });
+    return res
+      .status(500)
+      .json({ message: "Server error during profile update." });
   }
 };
 
 const verifyEmail = async (req, res) => {
-  const {token} = req.body
-  const jsonSecret = process.env.EMAIL_VERIFICATION_TOKEN_SECRET
+  const { token } = req.body;
+  const jsonSecret = process.env.EMAIL_VERIFICATION_TOKEN_SECRET;
 
-  if(!token) {
-    return res.status(404).json({message : "No token found"})
+  if (!token) {
+    return res.status(404).json({ message: "No token found" });
   }
   try {
+    const decoded = jwt.verify(token, jsonSecret);
 
-  const decoded = jwt.verify(token , jsonSecret )
+    if (decoded.type !== "email_verification") {
+      return res.status(404).json("Invalid token");
+    }
 
-  if(decoded.type !== 'email_verification') {
-    return res.status(404).json('Invalid token')
+    const user = await User.findById(decoded.userId);
+
+    if (!user) {
+      return res.status(404).json("No user found");
+    }
+
+    if (user.is_email_verified) {
+      return res.status(200).json({ message: "Email already verified" });
+    }
+
+    user.is_email_verified = true;
+    await user.save();
+  } catch (err) {
+    return res.status(403).json(err);
   }
-
-  const user = await User.findById(decoded.userId)
-
-  if(!user) {
-    return res.status(404).json('No user found')
-  }
-
-  if(user.is_email_verified) {
-    return res.status(200).json({message : "Email already verified"})
-  }
-
-  user.is_email_verified = true
-  await user.save()
-}
-  catch (err) {
-    return res.status(403).json(err)
-  }
-}
-
+};
 
 module.exports = {
   userSignUp,
@@ -419,5 +452,5 @@ module.exports = {
   googleCallBack,
   userResetPassword,
   updateProfile,
-  verifyEmail
+  verifyEmail,
 };
