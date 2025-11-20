@@ -1,2 +1,33 @@
-node_modules
+# --- Dependencies ---
+/node_modules
+/jspm_packages/
+/pnpm-lock.yaml
+
+# --- Build/Artifacts ---
+/dist
+/build
+/out-tsc
+/coverage
+/.nyc_output
+/reports
+
+# --- Secrets & Environment ---
 .env
+.env.*
+/config/secrets.json
+/config/local.json
+/local.js
+
+# --- Package Manager Locks/Caches (if not using Git for locking) ---
+# Note: yarn.lock and package-lock.json are usually committed, but caches are not
+/npm-debug.log
+/yarn-error.log
+.npm
+.yarn-cache
+
+# --- OS/Editor Files ---
+.DS_Store
+Thumbs.db
+/.*.swp
+.idea/
+.vscode/
