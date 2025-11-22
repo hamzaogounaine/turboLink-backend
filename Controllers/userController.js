@@ -14,6 +14,8 @@ const {
 } = require("../utils/sendEmails");
 const getVerificationEmailTemplate = require("../emails/deviceVerificationTemplates");
 const getAccountVerificationEmailTemplate = require("../emails/emailVerficationTemplates");
+const { email } = require("zod");
+const { OAuth2Client } = require("google-auth-library");
 
 const getUser = async (req, res) => {
   const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET;
@@ -252,6 +254,10 @@ const userResetPassword = async (req, res) => {
     const userId = decoded.userId;
     const user = await User.findById(userId);
 
+    if(user.is_google_user) {
+      return res.status(401).json({message : 'Not authorized'})
+    }
+
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
@@ -341,77 +347,134 @@ const googleCallBack = async (req, res) => {
 };
 
 const updateProfile = async (req, res) => {
-  // Use destructuring for clarity
-  const { userId, firstName, lastName, email, phoneNumber, password } =
-    req.body;
+  const { userId, firstName, lastName, email, phoneNumber, password } = req.body;
+  lang = req.cookies['NEXT_LOCALE']
 
-  // 1. INPUT VALIDATION (Crucial step you missed)
-  if (!userId) {
-    return res.status(400).json({ message: "Missing userId in request body." });
+  // 1. INPUT VALIDATION
+  if (!userId || !password) {
+    return res.status(400).json({ message: "User ID and password are required." });
   }
 
   try {
-    // 2. CHECK: Await the first database call to see if the user exists
+    // 2. FETCH USER (Select password for verification)
     const user = await User.findById(userId).select("+password");
+
+    // 3. SANITY CHECKS (Order matters!)
     if (!user) {
-      // The user object is null if Mongoose can't find it
-      return res.status(404).json({ message: "No user found with that ID." });
+      return res.status(404).json({ message: "User not found." });
     }
 
+    if (user.is_google_user) {
+      return res.status(403).json({ message: "Google users cannot update profile via this endpoint." });
+    }
+
+    // 4. VERIFY PASSWORD
     const pwdIsValid = await bcrypt.compare(password, user.password);
-
     if (!pwdIsValid) {
-      return res.status(403).json({ message: "passwordIncorrect" });
+      return res.status(403).json({ message: "Incorrect password." });
     }
 
-    const updatedUser = await User.findByIdAndUpdate(
-      userId,
-      {
-        first_name: firstName,
-        last_name: lastName,
-        email: email,
-        phone_number: phoneNumber,
-      },
-      { new: true, runValidators: true } // {new: true} returns the updated document
-    );
+    // 5. HANDLE UPDATES
+    let emailChanged = false;
+    
+    // Update basic fields
+    if (firstName) user.first_name = firstName;
+    if (lastName) user.last_name = lastName;
+    if (phoneNumber) user.phone_number = phoneNumber;
 
-    if (updatedUser.email !== email) {
+    // Handle Email Specific Logic
+    if (email && email !== user.email) {
+      emailChanged = true;
+      
+      // OPTION A (Safer): Don't change main email yet. Store in temp field.
+      // user.temp_email = email; 
+      
+      // OPTION B (Your logic, but working): Update email and mark unverified.
+      // WARNING: If they typo the email, they are locked out until they contact support.
+      user.email = email;
+      user.is_email_verified = false; // Assuming you have this field
+    }
+
+    // 6. SAVE (Triggers Mongoose validators)
+    const updatedUser = await user.save();
+
+    // 7. SEND VERIFICATION (Only if email changed)
+    if (emailChanged) {
       const verificationToken = generateEmailVeficationToken(updatedUser._id);
       const verificationLink = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
 
       const { html, subject } = getAccountVerificationEmailTemplate(
-        lang,
-        updatedUser.username,
+        lang, // Now defined
+        updatedUser.username || updatedUser.first_name,
         verificationLink
       );
 
-      const emailSent = await sendVerificationLink(
-        (to = updatedUser.email),
-        subject,
-        (body = html)
-      );
-      console.log(emailSent)
+      try {
+         sendVerificationLink(updatedUser.email, subject, html);
+      } catch (emailErr) {
+        console.error("Failed to send verification email:", emailErr);
+        // Don't fail the request, but log it. 
+        // Optionally return a warning in the response.
+      }
     }
 
-    // 4. RESPONSE: Return the successful status and the updated user data
-    if (updatedUser) {
-      // Return the updated user object so the client knows what changed
-      return res.status(200).json({
-        message: "Profile updated successfully",
-        user: updatedUser,
-      });
-    } else {
-      // This case shouldn't happen if the first check passed, but acts as a safeguard
-      return res.status(500).json({ message: "Update failed unexpectedly." });
-    }
+    return res.status(200).json({
+      message: emailChanged 
+        ? "Profile updated. Please verify your new email." 
+        : "Profile updated successfully",
+      user: updatedUser,
+    });
+
   } catch (err) {
-    // 5. ERROR HANDLING: Be specific in your status codes for database errors
     console.error("Profile update error:", err);
-    return res
-      .status(500)
-      .json({ message: "Server error during profile update." });
+    return res.status(500).json({ message: "Server error during profile update." });
   }
 };
+
+
+const updateGoogleUsersProfile = async (req, res) => {
+  const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+  const { userId,  firstName, lastName, phoneNumber , accessToken } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({ message: "User ID is required." });
+  }
+
+  if (!accessToken) {
+    return res.status(401).json({ message: "Google re-authentication required." });
+  }
+
+  try {
+    const googleUser = await client.getTokenInfo(accessToken);
+    console.log('googleUser' , googleUser)
+    // 🔎 Find & update in one query
+    const updatedUser = await User.findOneAndUpdate(
+      { _id: userId, googleId: googleUser.sub },
+      {
+        $set: {
+          ...(firstName && { first_name: firstName }),
+          ...(lastName && { last_name: lastName }),
+          ...(phoneNumber && { phone_number: phoneNumber }),
+        },
+      },
+      { new: true, runValidators: true }
+    );
+
+    // ❌ If no user was matched (wrong googleId or no user)
+    if (!updatedUser) {
+      return res.status(404).json({ message: "User not found or Google verification failed." });
+    }
+
+    return res.status(200).json({
+      message: "Profile updated successfully.",
+      user: updatedUser,
+    });
+  } catch (err) {
+    console.error("Profile update error:", err);
+    return res.status(500).json({ message: "Server error while updating profile." });
+  }
+};
+
 
 const verifyEmail = async (req, res) => {
   const { token } = req.body;
@@ -453,4 +516,5 @@ module.exports = {
   userResetPassword,
   updateProfile,
   verifyEmail,
+  updateGoogleUsersProfile
 };

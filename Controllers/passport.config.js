@@ -35,7 +35,7 @@ passport.use(
             username:
               profile.displayName.replace(/\s/g, "").toLowerCase() +
               Math.floor(Math.random() * 100),
-            isGoogleUser: true,
+              is_google_user: true,
             is_email_verified: true,
           });
         } else if (!user.googleId) {

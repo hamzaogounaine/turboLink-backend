@@ -43,7 +43,7 @@ const userSchema = mongoose.Schema(
       // minLength: [6, "passwordMinLength"],
       select: false
     },
-    isGoogleUser :{
+    is_google_user :{
       type : Boolean,
       default : false
     },
