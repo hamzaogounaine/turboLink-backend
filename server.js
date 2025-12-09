@@ -5,6 +5,7 @@ const authRoutes = require("./Routes/authRoutes");
 const mongoose = require("mongoose");
 const cookieParser = require("cookie-parser");
 const passport = require("passport");
+const urlRoutes = require("./Routes/urlRoutes");
 
 const app = express();
 app.use(express.json());
@@ -20,6 +21,7 @@ app.use(cookieParser())
 const PORT = process.env.PORT || 4000;
 //auth routes
 app.use(authRoutes);
+app.use(urlRoutes)
 
 //mongodb connect
 const mongodb_uri = process.env.MONGODB_URI;

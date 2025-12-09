@@ -13,7 +13,7 @@ const authHeader = req.headers.authorization;
       return res.status(401).json({ error: 'Invalid or expired access token' });
     }
     // Attach the user ID to the request object for use in subsequent handlers
-    req.id = payload.id;
+    req.user = payload;
     next();
   });
 }

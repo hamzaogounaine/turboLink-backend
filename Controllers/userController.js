@@ -120,7 +120,7 @@ const userLogin = async (req, res) => {
   const attemptsKey = `login_attempts:${email}`;
 
   try {
-    
+  
     const isLocked = await redis.get(lockKey);
     if (isLocked) {
       const ttl = await redis.ttl(lockKey);
