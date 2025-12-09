@@ -7,7 +7,6 @@ const urlRoutes = Router()
 
 urlRoutes.use(authMiddelware)
 
-
 urlRoutes.post('/api/url/short' , storeShortUrl)
 urlRoutes.get('/api/url/me' , getUserLinks)
 
