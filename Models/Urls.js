@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+const bcrypt = require('bcrypt');
+
 
 const analyticsSchema = mongoose.Schema({
   short_url: {
@@ -50,6 +52,9 @@ const urlSchema = mongoose.Schema({
   },
   title: String,
   description: String,
+  password : String,
+  max_clicks : Number,
+  current_clicks : Number,
   expires_at: Date,
   is_active: {
     type: Boolean,
@@ -66,9 +71,23 @@ const urlSchema = mongoose.Schema({
 urlSchema.index({ user_id: 1, created_at: -1 });
 urlSchema.index({ short_url: 1, is_active: 1 });
 
+
+
 // Pre-save middleware to update the updated_at field
-urlSchema.pre('save', function(next) {
+urlSchema.pre('save', async function(next) {
   this.updated_at = Date.now();
+
+  if (!this.isModified('password')) return next();
+
+  if(this.password) {
+    try {
+      const salt = await bcrypt.genSalt();
+      this.password = await bcrypt.hash(this.password, salt);
+      next();
+    } catch (err) {
+      next(err); // ❗ FIX — do NOT throw inside middleware
+    }
+  }
   next();
 });
 

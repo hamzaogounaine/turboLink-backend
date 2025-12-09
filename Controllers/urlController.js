@@ -2,18 +2,17 @@ const { isURL } = require("validator")
 const { Url } = require("../Models/Urls")
 const crypto = require('crypto')
 
-const checkShortUrlExistence = async (url) => {
-    return await Url.findOne({ short_url: url })
-}
+
 
 const createShortUrl = async (customUrl = null) => {
+
     // If custom URL provided, check if it exists
     if (customUrl) {
-        const linkAlreadyExists = await checkShortUrlExistence(customUrl)
+        const linkAlreadyExists = await Url.findOne({short_url : customUrl})
         if (linkAlreadyExists) {
             throw new Error('CUSTOM_URL_EXISTS')
         }
-        return `${process.env.FRONTEND_URL}/${customUrl}`
+        return customUrl
     }
     
     // Generate random short URL with collision retry
@@ -22,7 +21,7 @@ const createShortUrl = async (customUrl = null) => {
     
     while (attempts < maxAttempts) {
         const linkEnd = crypto.randomBytes(5).toString('hex').slice(0, 6)
-        const exists = await checkShortUrlExistence(linkEnd)
+        const exists = await await Url.findOne({short_url : linkEnd})
         
         if (!exists) {
             return linkEnd
@@ -35,27 +34,31 @@ const createShortUrl = async (customUrl = null) => {
 
 const storeShortUrl = async (req, res) => {
     try {
-        const { url, customShortUrl } = req.body
+        const { longUrl, customAlias , password , maxClicks } = req.body
         const userId = req.user.userId
         
         // Validate input
-        if (!url) {
+        if (!longUrl) {
             return res.status(400).json({ message: 'URL is required' })
         }
 
-        if(!isURL(url)) {
+        if(!isURL(longUrl)) {
             return res.status(400).json({ message: 'invalidUrlFormat' })
 
         }
+
         
-        // Create short URL (custom or random)
-        const shortUrl = await createShortUrl(customShortUrl)
+        
+        const shortUrl = await createShortUrl(customAlias)
         
         const createdShortLink = await Url.create({
-            redirect_url: url,
+            redirect_url: longUrl,
             short_url: shortUrl,
             user_id: userId,
+            max_clicks : maxClicks,
+            password : password
         })
+
         
         return res.status(201).json({ 
             message: 'linkCreated',
@@ -66,6 +69,8 @@ const storeShortUrl = async (req, res) => {
         if (error.message === 'CUSTOM_URL_EXISTS') {
             return res.status(409).json({ message: 'customUrlAlreadyExists' })
         }
+
+    
         
         console.error('Error creating short URL:', error)
         return res.status(500).json({ message: 'Internal server error' })
