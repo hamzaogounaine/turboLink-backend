@@ -54,7 +54,6 @@ const urlSchema = mongoose.Schema({
   description: String,
   password : String,
   max_clicks : Number,
-  current_clicks : Number,
   expires_at: Date,
   is_active: {
     type: Boolean,

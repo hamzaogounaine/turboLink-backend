@@ -77,11 +77,16 @@ const storeShortUrl = async (req, res) => {
     }
 }
 
+const getUrlDetails = async (req , res) => {
+
+    const fetchedUrl = req.url
+
+    return res.status(200).json(fetchedUrl)
+}
 
 const getUserLinks = async (req, res) => {
      
     const userId = req.user.userId
-
 
     const links = await Url.find({user_id : userId})
 
@@ -89,4 +94,51 @@ const getUserLinks = async (req, res) => {
 
 }
 
-module.exports = { storeShortUrl , getUserLinks}
+const editUrl = async (req, res) => {
+    // 1. Get the resource ID securely from the path parameter
+    const {short_url} = req.params; 
+    
+    // 2. Extract allowed updates (Do NOT include short_url)
+    const { redirect_url, max_clicks, password } = req.body;
+
+    try {
+        // 3. Find the URL by its ID AND the current user's ID (Authorization)
+        const fetchedUrl = await Url.findOne({ 
+            short_url : short_url,
+            userId: req.user.id // Critical: Authorization check in the fetch
+        }); 
+
+        if (!fetchedUrl) {
+            // Document not found OR the authenticated user does not own it.
+            return res.status(404).json({ message: "URL not found or not owned by you." });
+        }
+
+        // 4. Update the fields on the document object
+        if (redirect_url !== undefined) fetchedUrl.redirect_url = redirect_url;
+        if (max_clicks !== undefined) {
+            // Basic validation *before* saving
+            if (max_clicks < 0) {
+                return res.status(400).json({ message: "max_clicks cannot be negative." });
+            }
+            fetchedUrl.max_clicks = max_clicks;
+        }
+        if (password !== undefined) fetchedUrl.password = password; 
+        // NOTE: The pre('save') hook should handle the hashing of this new password.
+
+        // 5. Save the document (triggers pre('save') hooks and Mongoose validation)
+        const updatedUrl = await fetchedUrl.save(); 
+
+        // 6. Use correct status code
+        return res.status(200).json({ updatedUrl });
+
+    } catch (error) {
+        // Handle Mongoose validation errors
+        if (error.name === 'ValidationError') {
+            return res.status(400).json({ message: "Validation failed.", details: error.message });
+        }
+        console.error("URL Save Error:", error);
+        return res.status(500).json({ message: "Internal server error." });
+    }
+}
+
+module.exports = { storeShortUrl , getUserLinks , getUrlDetails , editUrl}
