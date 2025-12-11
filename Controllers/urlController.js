@@ -1,6 +1,7 @@
 const { isURL } = require("validator")
 const { Url } = require("../Models/Urls")
 const crypto = require('crypto')
+const bcrypt = require('bcrypt')
 
 
 
@@ -105,7 +106,7 @@ const editUrl = async (req, res) => {
         // 3. Find the URL by its ID AND the current user's ID (Authorization)
         const fetchedUrl = await Url.findOne({ 
             short_url : short_url,
-            userId: req.user.id // Critical: Authorization check in the fetch
+            user_id: req.user.userId // Critical: Authorization check in the fetch
         }); 
 
         if (!fetchedUrl) {
@@ -123,6 +124,8 @@ const editUrl = async (req, res) => {
             fetchedUrl.max_clicks = max_clicks;
         }
         if (password !== undefined) fetchedUrl.password = password; 
+        if (password === undefined && !fetchedUrl.password) fetchedUrl.password = undefined; 
+        
         // NOTE: The pre('save') hook should handle the hashing of this new password.
 
         // 5. Save the document (triggers pre('save') hooks and Mongoose validation)
@@ -141,4 +144,57 @@ const editUrl = async (req, res) => {
     }
 }
 
-module.exports = { storeShortUrl , getUserLinks , getUrlDetails , editUrl}
+const getUrlDetailsForRedirecting = async (req, res) => {
+    const {short_url} = req.params
+
+    try {
+        const fetchedUrl = await Url.findOne({short_url : short_url})
+
+        if(!fetchedUrl) {
+            return res.status(401).json({message : 'linkNotFound'})
+        }
+
+        if(fetchedUrl.password) {
+            return res.status(200).json({requirePassword : true})
+        }
+
+        return res.status(200).json(fetchedUrl)
+    }
+    catch (err) {
+        console.log(err)
+    }
+}
+
+const verifyUrlPassword = async (req, res) => {
+    const {short_url} = req.params
+    const {password} = req.body
+
+    try {
+        if(!password) {
+            return res.status(404).json({message : 'passwordRequired'})
+        }
+        const fetchedUrl = await Url.findOne({short_url : short_url})
+
+        if(!fetchedUrl) {
+            return res.status(401).json({message : 'linkNotFound'})
+        }
+
+        if(!fetchedUrl.password) {
+            return res.status(401).json({message : 'linkNotProtected'})
+        }
+
+        const pwdIsValid = await bcrypt.compare(password , fetchedUrl.password)
+
+        if(!pwdIsValid) {
+            return res.status(401).json({message : 'passwordNotCorrect'})
+        }
+
+        return res.status(200).json(fetchedUrl)
+        
+
+    } catch (err) {
+        console.log(err)
+    }
+}
+
+module.exports = { storeShortUrl , getUserLinks , getUrlDetails , editUrl , getUrlDetailsForRedirecting , verifyUrlPassword}
