@@ -21,7 +21,6 @@ const analyticsSchema = mongoose.Schema({
     user_agent: String,
     referrer: String,
     country: String,
-    city: String,
     device_type: String,
     browser: String,
     os: String
@@ -54,6 +53,7 @@ const urlSchema = mongoose.Schema({
   description: String,
   password : String,
   max_clicks : Number,
+  clicks : Number,
   expires_at: Date,
   is_active: {
     type: Boolean,
@@ -89,6 +89,24 @@ urlSchema.pre('save', async function(next) {
   }
   next();
 });
+
+urlSchema.post('findOneAndUpdate' , async function(next) {
+  const filter = this.getFilter()
+  const fetchedUrl = await this.model.findOne(filter).select('clicks max_clicks is_active')
+
+  if(!fetchedUrl || !fetchedUrl.is_active){
+    return next()
+  }
+
+  console.log(fetchedUrl.clicks >= fetchedUrl.max_clicks)
+  if(fetchedUrl.clicks >= fetchedUrl.max_clicks) {
+    fetchedUrl.is_active = false
+    await fetchedUrl.save()
+  }
+
+  next()
+
+})
 
 const Analytics = mongoose.model("Analytics", analyticsSchema);
 const Url = mongoose.model("Url", urlSchema);
