@@ -9,9 +9,7 @@ const {
 } = require("../utils/authUtils");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
-const {
-  sendVerificationLink,
-} = require("../utils/sendEmails");
+const { sendVerificationLink } = require("../utils/sendEmails");
 const getVerificationEmailTemplate = require("../emails/deviceVerificationTemplates");
 const getAccountVerificationEmailTemplate = require("../emails/emailVerficationTemplates");
 const { OAuth2Client } = require("google-auth-library");
@@ -28,7 +26,7 @@ const getUser = async (req, res) => {
 
   try {
     const payload = jwt.verify(accessToken, process.env.ACCESS_TOKEN_SECRET);
-    
+
     const user = await User.findById(payload.userId)
       .select("-password -refresh_token -ip_verification_code -last_login_ip")
       .lean();
@@ -39,10 +37,10 @@ const getUser = async (req, res) => {
 
     return res.status(200).json({ user });
   } catch (err) {
-    if (err.name === 'JsonWebTokenError') {
+    if (err.name === "JsonWebTokenError") {
       return res.status(401).json({ error: "tokenInvalid" });
     }
-    if (err.name === 'TokenExpiredError') {
+    if (err.name === "TokenExpiredError") {
       return res.status(401).json({ error: "tokenExpired" });
     }
     return res.status(401).json({ error: "tokenExpiredOrInvalid" });
@@ -50,7 +48,6 @@ const getUser = async (req, res) => {
 };
 
 const userSignUp = async (req, res) => {
-
   const { username, email, password, firstName, lastName } = req.body;
   const lang = req.cookies["NEXT_LOCALE"];
 
@@ -63,9 +60,9 @@ const userSignUp = async (req, res) => {
       const errors = {};
       if (emailExists) errors.email = "emailTaken";
       if (usernameExists) errors.username = "usernameTaken";
-      
+
       // Add small delay to prevent timing-based enumeration
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
       return res.status(400).json({ errors });
     }
 
@@ -85,7 +82,7 @@ const userSignUp = async (req, res) => {
       { new: true }
     ).select("-password -refresh_token");
 
-    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const verificationToken = crypto.randomBytes(32).toString("hex");
     const tokenExpiration = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
 
     await User.findByIdAndUpdate(createdUser._id, {
@@ -99,12 +96,18 @@ const userSignUp = async (req, res) => {
       createdUser.username,
       verificationLink
     );
-    
-    sendVerificationLink(createdUser.email, subject, html).catch(err => {
+
+    sendVerificationLink(createdUser.email, subject, html).catch((err) => {
       console.error("Email delivery failed:", err.message);
     });
 
-    return sendAuthResponse(res, cleanUser(updatedUser), accessToken, refreshToken, "accountCreated");
+    return sendAuthResponse(
+      res,
+      cleanUser(updatedUser),
+      accessToken,
+      refreshToken,
+      "accountCreated"
+    );
   } catch (err) {
     console.error("Signup Error:", err.message);
     return res.status(500).json({ message: "serverError" });
@@ -112,22 +115,22 @@ const userSignUp = async (req, res) => {
 };
 
 const userLogin = async (req, res) => {
-
   const { email, password } = req.body;
-  const clientIP = req.ip; 
+  const clientIP = req.headers["x-forwarded-for"]
+    ? req.headers["x-forwarded-for"].split(",")[0].trim()
+    : req.socket.remoteAddress;
   const lang = req.cookies["NEXT_LOCALE"];
   const lockKey = `account_lock:${email}`;
   const attemptsKey = `login_attempts:${email}`;
 
   try {
-  
     const isLocked = await redis.get(lockKey);
     if (isLocked) {
       const ttl = await redis.ttl(lockKey);
       const minutesRemaining = Math.ceil(ttl / 60);
-      return res.status(403).json({ 
+      return res.status(403).json({
         message: "accountLocked",
-        minutesRemaining 
+        minutesRemaining,
       });
     }
 
@@ -135,10 +138,9 @@ const userLogin = async (req, res) => {
 
     if (!user) {
       // Add delay to prevent timing attacks
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
       return res.status(403).json({ message: "invalidCredentials" });
     }
-
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
@@ -152,22 +154,22 @@ const userLogin = async (req, res) => {
 
       // Lock account after 5 failed attempts
       if (attempts >= 5) {
-        await redis.setex(lockKey, 10 * 60, 'locked'); // 30 min lock
+        await redis.setex(lockKey, 10 * 60, "locked"); // 30 min lock
         await redis.del(attemptsKey); // Clear attempts counter
-        
-        return res.status(403).json({ 
+
+        return res.status(403).json({
           message: "accountLockedDueToFailedAttempts",
-          minutesRemaining: 30
+          minutesRemaining: 30,
         });
       }
 
       await user.save();
-      
+
       // Add delay to prevent timing attacks
-      await new Promise(resolve => setTimeout(resolve, 100));
-      return res.status(403).json({ 
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      return res.status(403).json({
         message: "invalidCredentials",
-        attemptsRemaining: 5 - attempts
+        attemptsRemaining: 5 - attempts,
       });
     }
 
@@ -175,10 +177,9 @@ const userLogin = async (req, res) => {
     await redis.del(attemptsKey);
     await redis.del(lockKey);
 
-
     // IP Verification with stronger token
     if (user.last_login_ip && user.last_login_ip !== clientIP) {
-      const code = crypto.randomBytes(32).toString('hex');
+      const code = crypto.randomBytes(32).toString("hex");
       const codeExpiration = Date.now() + 15 * 60 * 1000;
 
       await User.findByIdAndUpdate(user._id, {
@@ -186,17 +187,17 @@ const userLogin = async (req, res) => {
         ip_verification_token_expiration: codeExpiration,
         pending_login_ip: clientIP,
       });
-      
+
       // For user display, create a shorter code
       const displayCode = crypto.randomInt(100000, 999999);
-      
+
       const { html, subject } = getVerificationEmailTemplate(
         lang,
         user.username,
         clientIP,
         displayCode
       );
-      
+
       await sendVerificationLink(user.email, subject, html);
 
       // Store the display code mapping (you'll need to add this field to schema)
@@ -214,14 +215,20 @@ const userLogin = async (req, res) => {
 
     const updatedUser = await User.findByIdAndUpdate(
       user._id,
-      { 
-        refresh_token: refreshToken, 
-        last_login_ip: clientIP
+      {
+        refresh_token: refreshToken,
+        last_login_ip: clientIP,
       },
       { new: true }
     ).select("-password -refresh_token");
 
-    return sendAuthResponse(res, cleanUser(updatedUser), accessToken, refreshToken, "loginSuccess");
+    return sendAuthResponse(
+      res,
+      cleanUser(updatedUser),
+      accessToken,
+      refreshToken,
+      "loginSuccess"
+    );
   } catch (err) {
     console.error("Login error:", err.message);
     return res.status(500).json({ message: "serverError" });
@@ -229,7 +236,6 @@ const userLogin = async (req, res) => {
 };
 
 const verifyIpCode = async (req, res) => {
-
   const { email, code } = req.body;
 
   try {
@@ -240,8 +246,10 @@ const verifyIpCode = async (req, res) => {
     }
 
     // Check if code is expired
-    if (!user.ip_verification_token_expiration || 
-        user.ip_verification_token_expiration < Date.now()) {
+    if (
+      !user.ip_verification_token_expiration ||
+      user.ip_verification_token_expiration < Date.now()
+    ) {
       return res.status(400).json({ message: "codeExpired" });
     }
 
@@ -256,8 +264,8 @@ const verifyIpCode = async (req, res) => {
 
     const updatedUser = await User.findByIdAndUpdate(
       user._id,
-      { 
-        refresh_token: refreshToken, 
+      {
+        refresh_token: refreshToken,
         last_login_ip: clientIP,
         ip_verification_token: null,
         ip_verification_token_expiration: null,
@@ -266,7 +274,13 @@ const verifyIpCode = async (req, res) => {
       { new: true }
     ).select("-password -refresh_token");
 
-    return sendAuthResponse(res, updatedUser, accessToken, refreshToken, "loginSuccess");
+    return sendAuthResponse(
+      res,
+      updatedUser,
+      accessToken,
+      refreshToken,
+      "loginSuccess"
+    );
   } catch (err) {
     console.error("IP verification error:", err.message);
     return res.status(500).json({ message: "serverError" });
@@ -275,7 +289,7 @@ const verifyIpCode = async (req, res) => {
 
 const userLogout = async (req, res) => {
   const authHeader = req.headers.authorization;
-  
+
   res.clearCookie("refreshToken", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "prod",
@@ -290,7 +304,7 @@ const userLogout = async (req, res) => {
 
   try {
     const decoded = jwt.verify(accessToken, process.env.ACCESS_TOKEN_SECRET);
-    
+
     await User.findByIdAndUpdate(decoded.userId, { refresh_token: null });
     return res.status(200).json({ message: "loggedOut" });
   } catch (err) {
@@ -300,7 +314,6 @@ const userLogout = async (req, res) => {
 };
 
 const userResetPassword = async (req, res) => {
-
   const { oldPassword, newPassword, newConfirmationPassword } = req.body;
   const authHeader = req.headers.authorization;
   const accessToken = authHeader && authHeader.split(" ")[1];
@@ -321,10 +334,12 @@ const userResetPassword = async (req, res) => {
     const user = await User.findById(decoded.userId).select("+password");
 
     if (!user) return res.status(404).json({ message: "userNotFound" });
-    if (user.is_google_user) return res.status(403).json({ message: 'actionNotAllowedForGoogleUser' });
+    if (user.is_google_user)
+      return res.status(403).json({ message: "actionNotAllowedForGoogleUser" });
 
     const isPasswordValid = await bcrypt.compare(oldPassword, user.password);
-    if (!isPasswordValid) return res.status(401).json({ message: "currentPasswordIncorrect" });
+    if (!isPasswordValid)
+      return res.status(401).json({ message: "currentPasswordIncorrect" });
 
     // Ensure new password is different from old
     if (await bcrypt.compare(newPassword, user.password)) {
@@ -332,10 +347,10 @@ const userResetPassword = async (req, res) => {
     }
 
     user.password = newPassword;
-    user.refresh_token = null; 
-    
+    user.refresh_token = null;
+
     // Invalidate all sessions by updating a session version (add this field to schema)
-    
+
     await user.save();
     res.clearCookie("refreshToken", {
       httpOnly: true,
@@ -345,10 +360,10 @@ const userResetPassword = async (req, res) => {
 
     return res.status(200).json({ message: "passwordResetSuccess" });
   } catch (err) {
-    if (err.name === 'JsonWebTokenError') {
+    if (err.name === "JsonWebTokenError") {
       return res.status(401).json({ message: "tokenInvalid" });
     }
-    if (err.name === 'TokenExpiredError') {
+    if (err.name === "TokenExpiredError") {
       return res.status(401).json({ message: "tokenExpired" });
     }
     console.error("Reset password error:", err.message);
@@ -357,26 +372,32 @@ const userResetPassword = async (req, res) => {
 };
 
 const updateProfile = async (req, res) => {
-  const { userId, firstName, lastName, email, phoneNumber, password } = req.body;
-  const lang = req.cookies['NEXT_LOCALE'];
+  const { userId, firstName, lastName, email, phoneNumber, password } =
+    req.body;
+  const lang = req.cookies["NEXT_LOCALE"];
 
-  if (!userId || !password) return res.status(400).json({ message: "missingCredentials" });
+  if (!userId || !password)
+    return res.status(400).json({ message: "missingCredentials" });
 
   try {
     const user = await User.findById(userId).select("+password");
 
     if (!user) return res.status(404).json({ message: "userNotFound" });
-    if (user.is_google_user) return res.status(403).json({ message: "googleProfileUpdateNotAllowed" });
+    if (user.is_google_user)
+      return res.status(403).json({ message: "googleProfileUpdateNotAllowed" });
 
     const pwdIsValid = await bcrypt.compare(password, user.password);
     if (!pwdIsValid) {
       // Add delay to prevent timing attacks
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
       return res.status(403).json({ message: "incorrectPassword" });
     }
 
     // Validate phone number format if provided
-    if (phoneNumber && !/^\+?[1-9]\d{1,14}$/.test(phoneNumber.replace(/[\s\-()]/g, ''))) {
+    if (
+      phoneNumber &&
+      !/^\+?[1-9]\d{1,14}$/.test(phoneNumber.replace(/[\s\-()]/g, ""))
+    ) {
       return res.status(400).json({ message: "invalidPhoneNumber" });
     }
 
@@ -395,14 +416,14 @@ const updateProfile = async (req, res) => {
 
       const emailExists = await User.exists({ email });
       if (emailExists) {
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
         return res.status(400).json({ message: "emailTaken" });
       }
 
       // user.new_email_pending = email;
-      
+
       // Generate secure verification token
-      const verificationToken = crypto.randomBytes(32).toString('hex');
+      const verificationToken = crypto.randomBytes(32).toString("hex");
       const tokenExpiration = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
 
       // user.email_update_verification_token = verificationToken;
@@ -411,26 +432,24 @@ const updateProfile = async (req, res) => {
       const verificationLink = `${process.env.FRONTEND_URL}/verify-update-email?token=${verificationToken}`;
 
       const { html, subject } = getAccountVerificationEmailTemplate(
-        lang, 
+        lang,
         user.username || user.first_name,
         verificationLink
       );
-      
-      sendVerificationLink(email, subject, html).catch(e => {
+
+      sendVerificationLink(email, subject, html).catch((e) => {
         console.error("Email delivery failed:", e.message);
       });
-      
+
       successKey = "profileUpdatedCheckEmail";
     }
 
     const updatedUser = await user.save();
-   
 
     return res.status(200).json({
       message: successKey,
       user: cleanUser(updatedUser),
     });
-
   } catch (err) {
     console.error("Profile update error:", err.message);
     return res.status(500).json({ message: "serverError" });
@@ -441,7 +460,8 @@ const updateGoogleUsersProfile = async (req, res) => {
   const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
   const { userId, firstName, lastName, phoneNumber, accessToken } = req.body;
 
-  if (!userId || !accessToken) return res.status(400).json({ message: "missingFields" });
+  if (!userId || !accessToken)
+    return res.status(400).json({ message: "missingFields" });
 
   try {
     // Verify Google token
@@ -449,15 +469,18 @@ const updateGoogleUsersProfile = async (req, res) => {
     //   idToken: accessToken,
     //   audience: process.env.GOOGLE_CLIENT_ID,
     // });
-    
+
     const payload = await client.getTokenInfo(accessToken);
-    console.log(payload)
+    console.log(payload);
     if (!payload || !payload.sub) {
       return res.status(403).json({ message: "invalidGoogleToken" });
     }
 
     // Validate phone number format if provided
-    if (phoneNumber && !/^\+?[1-9]\d{1,14}$/.test(phoneNumber.replace(/[\s\-()]/g, ''))) {
+    if (
+      phoneNumber &&
+      !/^\+?[1-9]\d{1,14}$/.test(phoneNumber.replace(/[\s\-()]/g, ""))
+    ) {
       return res.status(400).json({ message: "invalidPhoneNumber" });
     }
 
@@ -474,7 +497,9 @@ const updateGoogleUsersProfile = async (req, res) => {
     ).select("-password -refresh_token");
 
     if (!updatedUser) {
-      return res.status(404).json({ message: "userNotFoundOrVerificationFailed" });
+      return res
+        .status(404)
+        .json({ message: "userNotFoundOrVerificationFailed" });
     }
 
     return res.status(200).json({
@@ -482,13 +507,13 @@ const updateGoogleUsersProfile = async (req, res) => {
       user: cleanUser(updatedUser),
     });
   } catch (err) {
-    console.log(err)
+    console.log(err);
     console.error("Google Profile Update Error:", err.message);
-    
-    if (err.message && err.message.includes('Token')) {
+
+    if (err.message && err.message.includes("Token")) {
       return res.status(403).json({ message: "invalidGoogleToken" });
     }
-    
+
     return res.status(500).json({ message: "serverError" });
   }
 };
@@ -545,5 +570,5 @@ module.exports = {
   userResetPassword,
   updateProfile,
   updateGoogleUsersProfile,
-  googleCallBack
+  googleCallBack,
 };

@@ -3,6 +3,7 @@ const { Url, Analytics } = require("../Models/Urls");
 const crypto = require("crypto");
 const bcrypt = require("bcrypt");
 const UAParser = require("ua-parser-js");
+const geoip = require("geoip-lite")
 
 const createShortUrl = async (customUrl = null) => {
   // If custom URL provided, check if it exists
@@ -89,7 +90,8 @@ const editUrl = async (req, res) => {
   const { short_url } = req.params;
 
   // 2. Extract allowed updates (Do NOT include short_url)
-  const { redirect_url, max_clicks, password, diasble_password } = req.body;
+  const { redirect_url, max_clicks, password, disable_password } = req.body;
+  console.log(req.body)
 
   try {
     // 3. Find the URL by its ID AND the current user's ID (Authorization)
@@ -119,7 +121,7 @@ const editUrl = async (req, res) => {
       fetchedUrl.max_clicks = max_clicks;
     }
     if (password !== undefined) fetchedUrl.password = password;
-    if ((password === undefined && !fetchedUrl.password) || diasble_password)
+    if ((password === undefined && !fetchedUrl.password) || disable_password)
       fetchedUrl.password = undefined;
 
     // NOTE: The pre('save') hook should handle the hashing of this new password.
@@ -140,6 +142,24 @@ const editUrl = async (req, res) => {
     return res.status(500).json({ message: "Internal server error." });
   }
 };
+
+const disableLink = async (req, res) => {
+  const urlShort = req.url.short_url
+  const {checked} = req.body
+
+  try{
+    const fetchedUrl = await Url.findOneAndUpdate({short_url : urlShort} , {$set : {is_active : checked}})
+    
+    if(!fetchedUrl) {
+      return res.status(401).json({message : 'urlNotFound'})
+    }
+    return res.status(200).json({message : 'success'})
+  }
+  catch(err) {
+    console.log(err)
+  }
+  
+}
 
 const getUrlDetailsForRedirecting = async (req, res) => {
   const { short_url } = req.params;
@@ -203,6 +223,7 @@ const saveUrlAnalytics = async (req, res) => {
 
   const ua = new UAParser(req.headers["user-agent"]);
   const parsed = ua.getResult();
+  const geo = geoip.lookup(ipAddress);
 
   const urlAnalyticsArray = {
     ip_address: ipAddress,
@@ -211,6 +232,7 @@ const saveUrlAnalytics = async (req, res) => {
     device_type: parsed.device.type,
     browser: parsed.browser.name,
     os: parsed.os.name,
+    country : geo.country
   };
 
   const urlAnalytics = await Analytics.findOneAndUpdate(
@@ -228,6 +250,8 @@ const saveUrlAnalytics = async (req, res) => {
 
   await Url.findOneAndUpdate({short_url : short_url} , {$set : {clicks : urlAnalytics.clicks}}, {runValidators : true})
 
+  Url.recordClick(short_url)
+
 };
 
 module.exports = {
@@ -238,4 +262,5 @@ module.exports = {
   getUrlDetailsForRedirecting,
   verifyUrlPassword,
   saveUrlAnalytics,
+  disableLink
 };
