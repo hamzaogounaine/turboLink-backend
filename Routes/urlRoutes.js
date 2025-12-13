@@ -14,7 +14,7 @@ protectedRoute.get('/api/url/me' , getUserLinks)
 protectedRoute.get('/api/url/:short_url' ,urlsMiddleware, getUrlDetails)
 protectedRoute.put('/api/url/:short_url' ,urlsMiddleware, editUrl)
 urlRoutes.get('/api/url/details/:short_url' , getUrlDetailsForRedirecting)
-protectedRoute.post('/api/url/verify/:short_url' , verifyUrlPassword)
+urlRoutes.post('/api/url/verify/:short_url' , verifyUrlPassword)
 protectedRoute.post('/api/url/analytics/:short_url' , saveUrlAnalytics)
 protectedRoute.post('/api/url/disable/:short_url' , urlsMiddleware , disableLink)
 
