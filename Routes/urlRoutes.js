@@ -6,17 +6,18 @@ const urlsMiddleware = require("../Middelwares/urlsMiddleware");
 
 const urlRoutes = Router()
 
-urlRoutes.use(authMiddelware)
+const protectedRoute = Router()
+protectedRoute.use(authMiddelware)
 
-urlRoutes.post('/api/shorten' , storeShortUrl)
-urlRoutes.get('/api/url/me' , getUserLinks)
-urlRoutes.get('/api/url/:short_url' ,urlsMiddleware, getUrlDetails)
-urlRoutes.put('/api/url/:short_url' ,urlsMiddleware, editUrl)
+protectedRoute.post('/api/shorten' , storeShortUrl)
+protectedRoute.get('/api/url/me' , getUserLinks)
+protectedRoute.get('/api/url/:short_url' ,urlsMiddleware, getUrlDetails)
+protectedRoute.put('/api/url/:short_url' ,urlsMiddleware, editUrl)
 urlRoutes.get('/api/url/details/:short_url' , getUrlDetailsForRedirecting)
-urlRoutes.post('/api/url/verify/:short_url' , verifyUrlPassword)
-urlRoutes.post('/api/url/analytics/:short_url' , saveUrlAnalytics)
-urlRoutes.post('/api/url/disable/:short_url' , urlsMiddleware , disableLink)
+protectedRoute.post('/api/url/verify/:short_url' , verifyUrlPassword)
+protectedRoute.post('/api/url/analytics/:short_url' , saveUrlAnalytics)
+protectedRoute.post('/api/url/disable/:short_url' , urlsMiddleware , disableLink)
 
-
+urlRoutes.use(protectedRoute)
 
 module.exports = urlRoutes

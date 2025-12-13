@@ -239,7 +239,7 @@ const saveUrlAnalytics = async (req, res) => {
     { short_url: short_url },
     {
       $inc: { clicks: 1 },
-      $set: { click_details: urlAnalyticsArray },
+      $push: { click_details: urlAnalyticsArray },
     },
     {
       upsert: true,
