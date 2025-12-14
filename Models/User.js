@@ -71,6 +71,7 @@ const userSchema = mongoose.Schema(
       default : null
     },
     ip_verification_display_code : Number,
+    pending_login_ip : String,
     password_reset_token : {
       type : String
     },

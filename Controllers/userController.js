@@ -238,6 +238,7 @@ const userLogin = async (req, res) => {
 
 const verifyIpCode = async (req, res) => {
   const { email, code } = req.body;
+ 
 
   try {
     const user = await User.findOne({ email });
@@ -259,7 +260,7 @@ const verifyIpCode = async (req, res) => {
       return res.status(403).json({ message: "invalidCode" });
     }
 
-    const clientIP = user.pending_login_ip || req.ip;
+    const clientIP = user.pending_login_ip ;
 
     const { accessToken, refreshToken } = generateTokens(user);
 
