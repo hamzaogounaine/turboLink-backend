@@ -3,7 +3,7 @@ const { Url, Analytics } = require("../Models/Urls");
 const crypto = require("crypto");
 const bcrypt = require("bcrypt");
 const UAParser = require("ua-parser-js");
-const geoip = require("geoip-lite")
+const geoip = require("geoip-lite");
 
 const createShortUrl = async (customUrl = null) => {
   // If custom URL provided, check if it exists
@@ -91,7 +91,6 @@ const editUrl = async (req, res) => {
 
   // 2. Extract allowed updates (Do NOT include short_url)
   const { redirect_url, max_clicks, password, disable_password } = req.body;
-  console.log(req.body)
 
   try {
     // 3. Find the URL by its ID AND the current user's ID (Authorization)
@@ -100,7 +99,7 @@ const editUrl = async (req, res) => {
       user_id: req.user.userId, // Critical: Authorization check in the fetch
     });
 
-    fetchedUrl.is_active = !max_clicks || (max_clicks > fetchedUrl.clicks);
+    fetchedUrl.is_active = !max_clicks || max_clicks > fetchedUrl.clicks;
 
     if (!fetchedUrl) {
       // Document not found OR the authenticated user does not own it.
@@ -144,22 +143,23 @@ const editUrl = async (req, res) => {
 };
 
 const disableLink = async (req, res) => {
-  const urlShort = req.url.short_url
-  const {checked} = req.body
+  const urlShort = req.url.short_url;
+  const { checked } = req.body;
 
-  try{
-    const fetchedUrl = await Url.findOneAndUpdate({short_url : urlShort} , {$set : {is_active : checked}})
-    
-    if(!fetchedUrl) {
-      return res.status(401).json({message : 'urlNotFound'})
+  try {
+    const fetchedUrl = await Url.findOneAndUpdate(
+      { short_url: urlShort },
+      { $set: { is_active: checked } }
+    );
+
+    if (!fetchedUrl) {
+      return res.status(401).json({ message: "urlNotFound" });
     }
-    return res.status(200).json({message : 'success'})
+    return res.status(200).json({ message: "success" });
+  } catch (err) {
+    console.log(err);
   }
-  catch(err) {
-    console.log(err)
-  }
-  
-}
+};
 
 const getUrlDetailsForRedirecting = async (req, res) => {
   const { short_url } = req.params;
@@ -171,8 +171,8 @@ const getUrlDetailsForRedirecting = async (req, res) => {
       return res.status(401).json({ message: "linkNotFound" });
     }
 
-    if(!fetchedUrl.is_active) {
-        return res.status(401).json({message : 'urlDisabled'})
+    if (!fetchedUrl.is_active) {
+      return res.status(401).json({ message: "urlDisabled" });
     }
 
     if (fetchedUrl.password) {
@@ -221,39 +221,65 @@ const saveUrlAnalytics = async (req, res) => {
     ? req.headers["x-forwarded-for"].split(",")[0].trim()
     : req.socket.remoteAddress;
 
-  const ua = new UAParser(req.headers["user-agent"]);
-  const parsed = ua.getResult();
-  const geo = geoip.lookup(ipAddress);
+  try {
+    const ua = new UAParser(req.headers["user-agent"]);
+    const parsed = ua.getResult();
+    const geo = geoip.lookup(ipAddress);
 
-  const urlAnalyticsArray = {
-    ip_address: ipAddress,
-    user_agent: req.headers["user-agent"],
-    referrer: req.headers["referer"],
-    device_type: parsed.device.type,
-    browser: parsed.browser.name,
-    os: parsed.os.name,
-    country : geo?.country || null
-  };
+    const urlAnalyticsArray = {
+      ip_address: ipAddress,
+      user_agent: req.headers["user-agent"],
+      referrer: req.headers["referer"],
+      device_type: parsed.device.type,
+      browser: parsed.browser.name,
+      os: parsed.os.name,
+      country: geo?.country || null,
+    };
 
-  const urlAnalytics = await Analytics.findOneAndUpdate(
-    { short_url: short_url },
-    {
-      $inc: { clicks: 1 },
-      $push: { click_details: urlAnalyticsArray },
-    },
-    {
-      upsert: true,
-      new: true,
-      setDefaultsOnInsert: true, // Ensure 'clicks' starts at 0 if created
+    const urlAnalytics = await Analytics.findOneAndUpdate(
+      { short_url: short_url },
+      {
+        $inc: { clicks: 1 },
+        $push: { click_details: urlAnalyticsArray },
+      },
+      {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true, // Ensure 'clicks' starts at 0 if created
+      }
+    );
+
+    await Url.findOneAndUpdate(
+      { short_url: short_url },
+      { $set: { clicks: urlAnalytics.clicks } },
+      { runValidators: true }
+    );
+
+    Url.recordClick(short_url);
+
+    return res.end();
+  } catch (err) {
+    console.log(err);
+  }
+};
+
+const deleteLink = async (req, res) => {
+  const short_url = req.url.short_url;
+
+  try {
+    const deletedLink = await Url.findOneAndDelete(
+      { short_url: short_url },
+      { new: true }
+    );
+
+    if (!deletedLink) {
+      return res.status(401).json({ message: "deletedFailed" });
     }
-  );
-
-  await Url.findOneAndUpdate({short_url : short_url} , {$set : {clicks : urlAnalytics.clicks}}, {runValidators : true})
-
-  Url.recordClick(short_url)
-
-  return res.end()
-
+    await Url.deleteLinkAnalytics(short_url)
+    return res.status(200).json({message : "deleteSuccess"})
+  } catch (err) {
+    console.log(err);
+  }
 };
 
 module.exports = {
@@ -264,5 +290,6 @@ module.exports = {
   getUrlDetailsForRedirecting,
   verifyUrlPassword,
   saveUrlAnalytics,
-  disableLink
+  disableLink,
+  deleteLink
 };

@@ -135,7 +135,6 @@ const userLogin = async (req, res) => {
     }
 
     const user = await User.findOne({ email }).select("+password");
-    console.log('userIp' , clientIP , 'dbIp' , user.last_login_ip)
 
     if (!user) {
       // Add delay to prevent timing attacks

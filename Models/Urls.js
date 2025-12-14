@@ -92,6 +92,19 @@ urlSchema.pre("save", async function (next) {
   next();
 });
 
+urlSchema.statics.deleteLinkAnalytics = async function (short_url) {
+  try{ 
+    const AnalyticsModel = mongoose.model('Analytics');
+    const deletedAnalytics = await AnalyticsModel.findOneAndDelete({short_url : short_url})
+    if(deletedAnalytics) {
+      console.log('analytics deleted')
+    }
+  } 
+  catch(err) {
+    console.log(err)
+  }
+}
+
 urlSchema.statics.recordClick = async function (short_url) {
   const fetchedUrl = await this.findOne({ short_url: short_url }).select(
     "clicks max_clicks is_active"
