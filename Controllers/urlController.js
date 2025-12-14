@@ -232,7 +232,7 @@ const saveUrlAnalytics = async (req, res) => {
     device_type: parsed.device.type,
     browser: parsed.browser.name,
     os: parsed.os.name,
-    country : geo.country
+    country : geo?.country || null
   };
 
   const urlAnalytics = await Analytics.findOneAndUpdate(
@@ -251,6 +251,8 @@ const saveUrlAnalytics = async (req, res) => {
   await Url.findOneAndUpdate({short_url : short_url} , {$set : {clicks : urlAnalytics.clicks}}, {runValidators : true})
 
   Url.recordClick(short_url)
+
+  return res.end()
 
 };
 
