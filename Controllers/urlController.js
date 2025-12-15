@@ -165,7 +165,7 @@ const getUrlDetailsForRedirecting = async (req, res) => {
   const { short_url } = req.params;
 
   try {
-    const fetchedUrl = await Url.findOne({ short_url: short_url });
+    const fetchedUrl = await Url.findOne({ short_url: short_url }).select('redirect_url short_url is_active createdAt clicks -_id') ;
 
     if (!fetchedUrl) {
       return res.status(401).json({ message: "linkNotFound" });
@@ -282,6 +282,18 @@ const deleteLink = async (req, res) => {
   }
 };
 
+const getUrlAnalytics = async (req , res) => {
+  const short_url = req.url.short_url
+
+  try{
+    const analytics = await Analytics.findOne({short_url : short_url})
+    return res.status(200).json(analytics)
+  }
+  catch(err) {
+    console.log(err)
+  }
+}
+
 module.exports = {
   storeShortUrl,
   getUserLinks,
@@ -291,5 +303,6 @@ module.exports = {
   verifyUrlPassword,
   saveUrlAnalytics,
   disableLink,
-  deleteLink
+  deleteLink,
+  getUrlAnalytics
 };

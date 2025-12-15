@@ -1,6 +1,6 @@
 const { Router } = require("express");
 const authMiddelware = require("../Middelwares/authMiddelware");
-const { storeShortUrl, getUserLinks, getUrlDetails, editUrl, getUrlDetailsForRedirecting, verifyUrlPassword, saveUrlAnalytics, disableLink, deleteLink } = require("../Controllers/urlController");
+const { storeShortUrl, getUserLinks, getUrlDetails, editUrl, getUrlDetailsForRedirecting, verifyUrlPassword, saveUrlAnalytics, disableLink, deleteLink, getUrlAnalytics } = require("../Controllers/urlController");
 const urlsMiddleware = require("../Middelwares/urlsMiddleware");
 
 
@@ -16,6 +16,7 @@ protectedRoute.put('/api/url/:short_url' ,urlsMiddleware, editUrl)
 urlRoutes.get('/api/url/details/:short_url' , getUrlDetailsForRedirecting)
 urlRoutes.post('/api/url/verify/:short_url' , verifyUrlPassword)
 protectedRoute.post('/api/url/analytics/:short_url' , saveUrlAnalytics)
+protectedRoute.get('/api/url/analytics/:short_url' , urlsMiddleware , getUrlAnalytics)
 protectedRoute.post('/api/url/disable/:short_url' , urlsMiddleware , disableLink)
 protectedRoute.post('/api/url/delete/:short_url' , urlsMiddleware , deleteLink)
 

@@ -28,7 +28,7 @@ const getUser = async (req, res) => {
     const payload = jwt.verify(accessToken, process.env.ACCESS_TOKEN_SECRET);
 
     const user = await User.findById(payload.userId)
-      .select("-password -refresh_token -ip_verification_code -last_login_ip")
+      .select("email username first_name last_name phone_number is_email_verified is_google_user avatar_url createdAt -_id")
       .lean();
 
     if (!user) {
