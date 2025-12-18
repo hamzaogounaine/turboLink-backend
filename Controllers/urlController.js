@@ -220,7 +220,7 @@ const saveUrlAnalytics = async (req, res) => {
   const ipAddress = req.headers["x-forwarded-for"]
     ? req.headers["x-forwarded-for"].split(",")[0].trim()
     : req.socket.remoteAddress;
-
+  const {referrer} = req.body
   try {
     const ua = new UAParser(req.headers["user-agent"]);
     const parsed = ua.getResult();
@@ -229,7 +229,7 @@ const saveUrlAnalytics = async (req, res) => {
     const urlAnalyticsArray = {
       ip_address: ipAddress,
       user_agent: req.headers["user-agent"],
-      referrer: req.headers["referer"],
+      referrer: referrer,
       device_type: parsed.device.type,
       browser: parsed.browser.name,
       os: parsed.os.name,
